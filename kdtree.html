@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>K-d Tree Visual</title>
+
+  <style>
+body {
+  margin: 0;
+  padding: 24px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+  background-color: #f4f6f8;
+  color: #1f2933;
+}
+
+h1 {
+  margin-bottom: 4px;
+}
+
+p {
+  margin-top: 0;
+  color: #4b5563;
+}
+
+#action-bar {
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  max-width: 800px;
+}
+
+#action-bar form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#action-bar label {
+  font-weight: 500;
+}
+
+#action-bar input[type="number"] {
+  width: 120px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+}
+
+#action-bar button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#action-bar button:hover {
+  background-color: #1d4ed8;
+}
+
+#drawing-board {
+  height: 800px;
+  width: 800px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+
+#drawing-board > svg {
+  height: 100%;
+  width: 100%;
+  background-color: #0b0f19;
+}
+
+#kd-tree-view {
+  margin-left: 24px;
+  padding: 16px;
+  min-width: 360px;
+  max-height: 800px;
+  overflow: auto;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+#kd-tree-view span {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+#kd-tree-view pre {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #334155;
+}
+
+circle {
+  cursor: pointer;
+  transition: fill 0.2s ease;
+}
+
+hr {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+address {
+  margin-top: 24px;
+  font-style: normal;
+  color: #6b7280;
+}
+  </style>
+</head>
+
+<body>
+  <h1>K-d Tree Search</h1>
+  <p>This is a K-d Tree Search</p>
+
+  <div id="action-bar">
+    <hr>
+
+    <form id="action-bar-refresh" action="#" method="dialog">
+      <label>
+        Amount of Circles:
+        <input
+          id="action-bar-refresh-amount"
+          type="number"
+          value="100"
+        />
+      </label>
+
+      <button
+        id="action-bar-refresh-refresh"
+        type="submit"
+        onclick="drawCirclesRandomly(document.getElementById('action-bar-refresh-amount').value)"
+      >
+        Refresh
+      </button>
+    </form>
+
+    <hr>
+
+    <form id="action-bar-config" action="#" method="dialog">
+      <label>
+        Throttel Search Time in ms
+        <input
+          id="action-bar-config.throttel"
+          type="number"
+          value="10"
+          onchange="changeSleepTime(event)"
+        />
+      </label>
+    </form>
+
+    <p>Click on a circle to show its nearest neighbour. Red is the nearest.</p>
+  </div>
+
+  <hr>
+
+  <div style="display: flex">
+    <div id="drawing-board">
+      <template id="circle-template">
+        <svg>
+          <circle
+            id="circle-template-item"
+            cx="20"
+            cy="20"
+            r="7"
+            style="fill:#FFFFFF;stroke-width:0.1"
+            onclick="selectCircle(event)"
+          />
+        </svg>
+      </template>
+
+      <svg></svg>
+
+      <script>
+        let circleMap = {};
+        let circleIdList = [];
+
+        let drawingBoardDiv = document.getElementById("drawing-board");
+        let drawingBoardSvg = drawingBoardDiv.querySelector("svg");
+        let drawingBoardDimensions = () => drawingBoardSvg.getBoundingClientRect();
+
+        let kdTree;
+        let searchNearestSleep = 10;
+
+        function main() {
+          drawCirclesRandomly();
+        }
+
+        function changeSleepTime(event) {
+          searchNearestSleep = event.target.value;
+        }
+
+        function selectCircle(event) {
+          let x = event.target.getAttribute("cx");
+          let y = event.target.getAttribute("cy");
+
+          searchNearest(kdTree, { x: x, y: y }).then((nearest) => {
+            nearest.setAttribute(
+              "style",
+              nearest.getAttribute("style").replace("fill:#FFFFFF", "fill:#FF0000")
+            );
+            nearest.setAttribute(
+              "style",
+              nearest.getAttribute("style").replace("fill:#FFFF00", "fill:#FF0000")
+            );
+
+            setTimeout(() => {
+              nearest.setAttribute(
+                "style",
+                nearest.getAttribute("style").replace("fill:#FF0000", "fill:#FFFFFF")
+              );
+            }, 2000);
+          });
+        }
+
+        function generateKdTree(circles = null, depth = 0) {
+          if (circles === null) circles = Object.values(circleMap);
+          if (circles.length === 0) return null;
+
+          let k = 2;
+          let axis = depth % k;
+
+          circles.sort((a, b) => {
+            a = parseInt(a.getAttribute("c" + (axis ? "y" : "x")));
+            b = parseInt(b.getAttribute("c" + (axis ? "y" : "x")));
+            return a < b ? -1 : a === b ? 0 : 1;
+          });
+
+          let median = Math.floor(circles.length / 2);
+
+          return {
+            element: circles[median],
+            left: generateKdTree(circles.slice(0, median), depth + 1),
+            right: generateKdTree(circles.slice(median + 1), depth + 1),
+          };
+        }
+
+        let sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        async function searchNearest(node, circle, depth = 0) {
+          await sleep(searchNearestSleep);
+
+          if (!node || !node.element) return null;
+
+          let axis = depth % 2;
+          let nodeX = parseFloat(node.element.getAttribute("cx"));
+          let nodeY = parseFloat(node.element.getAttribute("cy"));
+
+          node.element.setAttribute(
+            "style",
+            node.element.getAttribute("style").replace("fill:#FFFFFF", "fill:#FFFF00")
+          );
+
+          setTimeout(() => {
+            node.element.setAttribute(
+              "style",
+              node.element.getAttribute("style").replace("fill:#FFFF00", "fill:#FFFFFF")
+            );
+          }, 100 + parseInt(searchNearestSleep));
+
+          let best = null;
+          let bestDist = Infinity;
+
+          let dist =
+            (circle.x - nodeX) ** 2 +
+            (circle.y - nodeY) ** 2;
+
+          if (dist !== 0) {
+            best = node.element;
+            bestDist = dist;
+          }
+
+          let first =
+            axis === 0
+              ? circle.x < nodeX
+                ? node.left
+                : node.right
+              : circle.y < nodeY
+              ? node.left
+              : node.right;
+
+          let second = first === node.left ? node.right : node.left;
+
+          let candidate = await searchNearest(first, circle, depth + 1);
+
+          if (candidate) {
+            let cx = candidate.getAttribute("cx");
+            let cy = candidate.getAttribute("cy");
+            let d = (circle.x - cx) ** 2 + (circle.y - cy) ** 2;
+
+            if (d < bestDist && d !== 0) {
+              bestDist = d;
+              best = candidate;
+            }
+          }
+
+          let diff = axis === 0 ? Math.abs(circle.x - nodeX) : Math.abs(circle.y - nodeY);
+
+          if (diff * diff < bestDist) {
+            candidate = await searchNearest(second, circle, depth + 1);
+
+            if (candidate) {
+              let cx = candidate.getAttribute("cx");
+              let cy = candidate.getAttribute("cy");
+              let d = (circle.x - cx) ** 2 + (circle.y - cy) ** 2;
+
+              if (d < bestDist && d !== 0) {
+                best = candidate;
+              }
+            }
+          }
+
+          return best;
+        }
+
+        function drawCirclesRandomly(amount = 100) {
+          cleanCircles();
+          let padding = 40;
+
+          for (let i = 0; i < amount; i++) {
+            let circle = provideCircleCloneFromTemplate();
+
+            let h = drawingBoardDimensions().height - padding;
+            let w = drawingBoardDimensions().width - padding;
+
+            circle.setAttribute("cy", Math.max(padding, Math.random() * h));
+            circle.setAttribute("cx", Math.max(padding, Math.random() * w));
+
+            drawingBoardSvg.appendChild(circle);
+          }
+
+          updateKdTree();
+        }
+
+        function updateKdTree() {
+          let kdTreeView = document.getElementById("kd-tree");
+          kdTree = generateKdTree();
+          kdTreeView.innerText = JSON.stringify(kdTree, kdTreeReplacer, 2);
+        }
+
+        function kdTreeReplacer(key, value) {
+          if (value instanceof SVGCircleElement) {
+            return {
+              id: value.id,
+              cx: value.getAttribute("cx"),
+              cy: value.getAttribute("cy"),
+              r: value.getAttribute("r"),
+            };
+          }
+          return value;
+        }
+
+        function cleanCircles() {
+          circleMap = {};
+          circleIdList = [];
+          drawingBoardSvg.replaceChildren();
+        }
+
+        function provideCircleCloneFromTemplate() {
+          let template = document.getElementById("circle-template");
+          let circle = document
+            .importNode(template.content, true)
+            .getElementById("circle-template-item");
+
+          let lastId = circleIdList.at(-1);
+          let id = lastId ? "c-" + (parseInt(lastId.split("-")[1]) + 1) : "c-1";
+
+          circle.setAttribute("id", id);
+          circleIdList.push(id);
+          circleMap[id] = circle;
+
+          return circle;
+        }
+
+        addEventListener("load", main);
+      </script>
+    </div>
+
+    <div id="kd-tree-view">
+      <span>K-d Tree in JSON</span>
+      <pre id="kd-tree"></pre>
+    </div>
+  </div>
+  <hr>
+</body>
+</html>
